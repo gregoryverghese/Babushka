@@ -19,6 +19,23 @@ using either an **analytic (hypergeometric)** model or a **Monte Carlo simulatio
 # Utility functions
 # -----------------------------
 
+def binomial_prob_at_least_one(H, F, N, q=1.0):
+    """
+    Visit-based model (binomial approximation).
+    Each visit is a trial:
+      p_engage = q * (F/H)
+    Probability of at least one engagement over N visits.
+    """
+    if H <= 0 or N <= 0 or F <= 0 or q <= 0:
+        return 0.0
+
+    p_engage = q * (F / H)
+    # Clamp just in case of weird inputs
+    p_engage = max(0.0, min(1.0, p_engage))
+
+    return 1 - (1 - p_engage) ** N
+
+
 def hypergeometric_p_k(H, F, N, k):
     """Probability of exactly k known houses visited."""
     if k > F or k > N:
@@ -82,7 +99,12 @@ q = st.sidebar.slider(
     min_value=0.0, max_value=1.0, value=1.0, step=0.05
 )
 
-mode = st.sidebar.radio("Model", ["Analytic", "Monte Carlo"])
+
+mode = st.sidebar.radio(
+    "Model",
+    ["Hypergeometric (house-based)", "Binomial (visit-based)", "Monte Carlo"]
+)
+
 sims = 5000
 
 if mode == "Monte Carlo":
@@ -98,15 +120,21 @@ st.sidebar.caption("Tip: start simple, then explore sensitivity.")
 
 st.subheader("Results")
 
-if mode == "Analytic":
+if mode == "Hypergeometric (house-based)":
     p = analytic_prob_at_least_one(H, F, N, q)
-    st.metric("Probability (analytic)", f"{p*100:.2f}%")
-    st.caption("Computed using the hypergeometric model.")
+    st.metric("Probability (hypergeometric)", f"{p*100:.2f}%")
+    st.caption("House-based model using the hypergeometric distribution (distinct houses visited).")
 
-else:
+elif mode == "Binomial (visit-based)":
+    p = binomial_prob_at_least_one(H, F, N, q)
+    st.metric("Probability (binomial)", f"{p*100:.2f}%")
+    st.caption("Visit-based model using the binomial distribution (visits treated as independent trials).")
+
+else:  # Monte Carlo
     p_mc = monte_carlo_prob(H, F, N, q, sims)
     st.metric("Probability (Monte Carlo)", f"{p_mc*100:.2f}%")
     st.caption(f"Estimated from {sims:,} simulated scenarios.")
+
 
 # -----------------------------
 # P plot
@@ -117,6 +145,18 @@ import altair as alt
 import numpy as np
 
 st.subheader("Probability vs. Number of Houses Visited")
+
+# -------------------------
+# Helper: pick analytic model for curve
+# -------------------------
+def analytic_for_curve(H, F, N_i, q, mode):
+    if mode == "Hypergeometric (house-based)":
+        return analytic_prob_at_least_one(H, F, N_i, q)
+    elif mode == "Binomial (visit-based)":
+        return binomial_prob_at_least_one(H, F, N_i, q)
+    else:
+        # If in Monte Carlo mode, default to hypergeometric for the line
+        return analytic_prob_at_least_one(H, F, N_i, q)
 
 # -------------------------
 # Monte Carlo curve toggle
@@ -133,7 +173,7 @@ else:
     st.caption("Select Monte Carlo mode on the left to enable the Monte Carlo curve.")
 
 # -------------------------
-# Build analytic curve
+# Build analytic curve (hypergeometric or binomial)
 # -------------------------
 max_N = min(H, 2000)
 
@@ -142,13 +182,13 @@ Ns = np.linspace(1, max_N, num_points, dtype=int)
 Ns = sorted(set(Ns))
 
 analytic_probs = [
-    analytic_prob_at_least_one(H, F, N_i, q)
+    analytic_for_curve(H, F, N_i, q, mode)
     for N_i in Ns
 ]
 
 df_plot = pd.DataFrame({
     "N": Ns,
-    "Model": ["Analytic"] * len(Ns),
+    "Model": [mode if mode != "Monte Carlo" else "Hypergeometric (house-based)"] * len(Ns),
     "Probability": analytic_probs,
 })
 
@@ -209,10 +249,9 @@ if st.session_state["show_mc_curve"] and mode == "Monte Carlo":
 st.altair_chart(chart.interactive(), use_container_width=True)
 
 st.caption(
-    "Analytic curve is always shown. "
-    "Click the button (in Monte Carlo mode) to add a simulated comparison curve."
+    "The curve shows the selected analytic model (hypergeometric or binomial). "
+    "In Monte Carlo mode, you can optionally add a simulated comparison curve."
 )
-
 
 # -----------------------------
 # Explanation panel
@@ -220,10 +259,30 @@ st.caption(
 
 st.subheader("Model Explanation")
 
-tab1, tab2 = st.tabs(["🧮 Analytic model", "🎲 Monte Carlo model"])
+tab1, tab2, tab3 = st.tabs([
+    "📍 Binomial (visit-based)"
+    "🧮 Hypergeometric (house-based)",
+    "🎲 Monte Carlo",
+
+])
+
 
 with tab1:
+
     st.markdown(
+        """
+### Binomial (Visit-Based) Model
+
+**Intuition:**  
+Instead of treating each house visit as a trial, we treat each visit as an independent Bernoulli trial with probability \(q\) of engagement.
+"""
+    )
+    
+
+
+with tab2:
+
+            st.markdown(
         """
 ### Analytic (Hypergeometric) Model
 
@@ -270,8 +329,11 @@ so we compute that case and subtract from 1.
     )
 
 
-with tab2:
-    st.markdown(
+
+
+with tab3:
+
+        st.markdown(
         """
 ### Monte Carlo (Simulation) Model
 
@@ -295,3 +357,6 @@ the fraction of successes ≈ the probability.
 - Great for experimentation and visualisation
 """
     )
+
+
+
