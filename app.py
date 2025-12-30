@@ -4,14 +4,14 @@ import numpy as np
 import streamlit as st
 from math import comb
 
-st.set_page_config(page_title="Babuskha – Lost Cat Model")
+st.set_page_config(page_title="Find Babuskha Model")
 
-st.title("🐱 Babuskha – Lost Cat Probability Explorer")
+st.title("🐱 Find Babuskha Model")
 
 st.markdown(
     """
-This app estimates the probability that a lost cat meets someone the owner knows,
-using either an **analytic (hypergeometric)** model or a **Monte Carlo simulation**.
+This app estimates the probability that a Babushka meets at least one person her owner knows on a trip around the neighbourhood,
+using either a binomial model (analytic) or a **Monte Carlo simulation**.
 """
 )
 
@@ -92,7 +92,7 @@ st.sidebar.header("Model Inputs")
 
 H = st.sidebar.number_input("Total houses in area (H)", min_value=1, value=2000)
 F = st.sidebar.number_input("Known houses (F)", min_value=0, value=20)
-N = st.sidebar.number_input("Distinct houses visited (N)", min_value=1, value=3)
+N = st.sidebar.number_input("Houses visited (N)", min_value=1, value=3)
 
 q = st.sidebar.slider(
     "Engagement probability per known-house visit (q)",
@@ -102,7 +102,7 @@ q = st.sidebar.slider(
 
 mode = st.sidebar.radio(
     "Model",
-    ["Hypergeometric (house-based)", "Binomial (visit-based)", "Monte Carlo"]
+    ["Binomial","Hypergeometric",  "Monte Carlo"]
 )
 
 sims = 5000
@@ -111,7 +111,6 @@ if mode == "Monte Carlo":
     sims = st.sidebar.slider("Simulation runs", 1000, 20000, 5000, step=1000)
 
 st.sidebar.markdown("---")
-st.sidebar.caption("Tip: start simple, then explore sensitivity.")
 
 
 # -----------------------------
@@ -120,12 +119,12 @@ st.sidebar.caption("Tip: start simple, then explore sensitivity.")
 
 st.subheader("Results")
 
-if mode == "Hypergeometric (house-based)":
+if mode == "Hypergeometric":
     p = analytic_prob_at_least_one(H, F, N, q)
     st.metric("Probability (hypergeometric)", f"{p*100:.2f}%")
-    st.caption("House-based model using the hypergeometric distribution (distinct houses visited).")
+    st.caption("House-based model using the hypergeometric distribution (Houses visited).")
 
-elif mode == "Binomial (visit-based)":
+elif mode == "Binomial":
     p = binomial_prob_at_least_one(H, F, N, q)
     st.metric("Probability (binomial)", f"{p*100:.2f}%")
     st.caption("Visit-based model using the binomial distribution (visits treated as independent trials).")
@@ -273,6 +272,10 @@ with tab1:
         """
 ### 📍 Binomial (Visit-Based) Model
 
+We use a binomial model because we think of each visit as a trial that can only go one of two ways: either the cat meets someone they know (a success), or it doesn’t (a failure). Over 
+N visits there are many different ways those successes could occur, for example, the 3rd visit might be the success, or the 5th, or several of them, and the binomial distribution correctly accounts for all the different combinations of successes across the 
+N visits. In this app, we’re especially interested in the chance that at least one of those visits is a success (cat meets someone the owner knows).
+
 **Idea (what this model assumes):**  
 We treat each **visit** as a separate opportunity for engagement.  
 The cat may revisit the same house multiple times — every arrival is another chance.
@@ -322,15 +325,7 @@ P(\text{at least one engagement})
 
     st.markdown(
         """
-### 🐈 Intuition
 
-Every visit is like flipping a weighted coin:
-
-- Unknown house → nothing happens  
-- Known house → engagement happens with probability **q**  
-- As soon as **one** visit succeeds, we count it as success overall
-
-This model fits situations where we care about **opportunities across visits**, including revisits.
 """
     )
 
@@ -390,20 +385,7 @@ P(\text{no engagement})
     st.markdown("Therefore, the probability of **meeting at least one known person** is:")
     st.latex(r"P(\text{meet ≥ 1 known person}) = 1 - P(\text{no engagement})")
 
-    st.markdown(
-        """
-### 🐈 Intuition
 
-Imagine all houses as balls in a bag:
-
-- **F** friend-house balls  
-- **H − F** ordinary balls  
-
-The cat's journey is like drawing \(N\) balls **without replacement**.  
-We are asking: *what is the chance that at least one of the drawn balls is a friend-house ball?*  
-The term \(q\) allows for the fact that even at a friend’s house, engagement might fail.
-"""
-    )
 
 # -------------------------------------------------------------------
 # TAB 3 — MONTE CARLO (SIMULATION)
@@ -441,17 +423,5 @@ r"""
 """
     )
 
-    st.markdown(
-        """
-### 🧠 Why Monte Carlo is useful
 
-- Works when the analytic maths becomes complicated  
-  (e.g. distance weighting, biased movement, street networks)  
-- Lets us **test and compare** the analytic models  
-- Makes the randomness tangible: each run is one possible “lost cat” story
-
-Monte Carlo is like replaying the missing-cat story thousands of times  
-and counting how often the cat meets someone you know.
-"""
-    )
 
