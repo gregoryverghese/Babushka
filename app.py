@@ -10,7 +10,7 @@ st.title("🐱 Find Babuskha Model")
 
 st.markdown(
     """
-This app estimates the probability that a Babushka meets at least one person her owner knows on a trip around the neighbourhood,
+This app estimates the probability that Babushka meets at least one person her owner knows on a trip around the neighbourhood houses,
 using either a binomial model (analytic) or a **Monte Carlo simulation**.
 """
 )
