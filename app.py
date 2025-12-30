@@ -257,48 +257,125 @@ st.caption(
 # Explanation panel
 # -----------------------------
 
-st.subheader("Model Explanation")
+st.subheader("Model explanation")
 
 tab1, tab2, tab3 = st.tabs([
-    "📍 Binomial (visit-based)"
+    "📍 Binomial (visit-based)",
     "🧮 Hypergeometric (house-based)",
-    "🎲 Monte Carlo",
-
+    "🎲 Monte Carlo"
 ])
 
-
+# -------------------------------------------------------------------
+# TAB 1 — BINOMIAL (VISIT-BASED)
+# -------------------------------------------------------------------
 with tab1:
+    st.markdown(
+        """
+### 📍 Binomial (Visit-Based) Model
+
+**Idea (what this model assumes):**  
+We treat each **visit** as a separate opportunity for engagement.  
+The cat may revisit the same house multiple times — every arrival is another chance.
+
+- **H** — total houses  
+- **F** — houses belonging to people the owner knows  
+- **N** — number of visits the cat makes  
+- **q** — probability of engagement when a known house is visited
+"""
+    )
+
+    st.markdown("**Probability a visit is to a known house:**")
+    st.latex(r"p_{\text{known}} = \frac{F}{H}")
+
+    st.markdown("**Probability a visit results in engagement:**")
+    st.latex(r"p_{\text{engage}} = q \cdot p_{\text{known}} = q \cdot \frac{F}{H}")
+
+    st.markdown("#### Binomial distribution")
+
+    st.markdown("Let \(X\) be the number of visits that result in an engagement.")
+    st.latex(r"X \sim \text{Binomial}(N,\; p_{\text{engage}})")
+
+    st.markdown("The probability of **exactly \(k\) engagements** is:")
+    st.latex(
+r"""
+P(X = k)
+=
+\binom{N}{k}
+\left(p_{\text{engage}}\right)^k
+\left(1-p_{\text{engage}}\right)^{N-k}
+"""
+    )
+
+    st.markdown("Probability of **no engagement on any visit**:")
+    st.latex(r"P(X = 0) = (1 - p_{\text{engage}})^N")
+
+    st.markdown("Therefore, the probability of **at least one engagement** is:")
+    st.latex(
+r"""
+P(\text{at least one engagement})
+=
+1 - (1 - p_{\text{engage}})^N
+=
+1 - \left(1 - q\frac{F}{H}\right)^N
+"""
+    )
 
     st.markdown(
         """
-### Binomial (Visit-Based) Model
+### 🐈 Intuition
 
-**Intuition:**  
-Instead of treating each house visit as a trial, we treat each visit as an independent Bernoulli trial with probability \(q\) of engagement.
+Every visit is like flipping a weighted coin:
+
+- Unknown house → nothing happens  
+- Known house → engagement happens with probability **q**  
+- As soon as **one** visit succeeds, we count it as success overall
+
+This model fits situations where we care about **opportunities across visits**, including revisits.
 """
     )
-    
 
-
+# -------------------------------------------------------------------
+# TAB 2 — HYPERGEOMETRIC (HOUSE-BASED)
+# -------------------------------------------------------------------
 with tab2:
-
-            st.markdown(
+    st.markdown(
         """
-### Analytic (Hypergeometric) Model
+### 🧮 Hypergeometric (House-Based) Model
 
-**Intuition:**  
-The cat visits \(N\) distinct houses out of \(H\) total.  
-\(F\) of those houses belong to people the owner knows.  
-We treat this like **drawing houses without replacement**.
+**Idea (what this model assumes):**  
+We think in terms of **distinct houses**, not visits.  
+What matters is which **unique houses** the cat ends up in.
 
-- \(H\) — total houses  
-- \(F\) — known houses  
-- \(N\) — distinct houses visited  
-- \(q\) — probability of engagement when a known house is visited
+- **H** — total houses  
+- **F** — houses belonging to people the owner knows  
+- **N** — number of **distinct** houses visited  
+- **q** — probability of engagement when a known house is visited
 """
     )
 
-    st.markdown("**No-engagement probability:**")
+    st.markdown("Let \(K\) be the number of known houses among the \(N\) visited houses.")
+    st.markdown("**Hypergeometric probability of visiting exactly \(k\) known houses:**")
+    st.latex(
+r"""
+P(K = k)
+=
+\frac{
+\binom{F}{k}\,
+\binom{H-F}{N-k}
+}{
+\binom{H}{N}
+}
+"""
+    )
+
+    st.markdown(
+        """
+If the cat visits \(k\) known houses, engagement must fail at **all \(k\)** of them for no meeting to occur.  
+That has probability \((1-q)^k\).
+
+So the total probability of **no engagement at all** is:
+"""
+    )
     st.latex(
 r"""
 P(\text{no engagement})
@@ -310,53 +387,71 @@ P(\text{no engagement})
 """
     )
 
-    st.markdown("**Probability of meeting ≥ 1 known person:**")
+    st.markdown("Therefore, the probability of **meeting at least one known person** is:")
+    st.latex(r"P(\text{meet ≥ 1 known person}) = 1 - P(\text{no engagement})")
+
+    st.markdown(
+        """
+### 🐈 Intuition
+
+Imagine all houses as balls in a bag:
+
+- **F** friend-house balls  
+- **H − F** ordinary balls  
+
+The cat's journey is like drawing \(N\) balls **without replacement**.  
+We are asking: *what is the chance that at least one of the drawn balls is a friend-house ball?*  
+The term \(q\) allows for the fact that even at a friend’s house, engagement might fail.
+"""
+    )
+
+# -------------------------------------------------------------------
+# TAB 3 — MONTE CARLO (SIMULATION)
+# -------------------------------------------------------------------
+with tab3:
+    st.markdown(
+        """
+### 🎲 Monte Carlo (Simulation) Model
+
+**Idea:**  
+Instead of solving the probability with a formula, we **simulate the scenario many times**
+and see how often a meeting happens.
+"""
+    )
+
+    st.markdown("#### One simulation run looks like this:")
+
+    st.markdown(
+        """
+1. Randomly choose **F** known houses out of **H**  
+2. Randomly choose **N** distinct visited houses out of **H**  
+3. Find which of the visited houses are known houses  
+4. For each visited known house, flip an engagement coin with probability **q**  
+5. If **any** of those flips succeed, we count that run as “meeting happened”
+"""
+    )
+
+    st.markdown("After many runs, the estimated probability is:")
     st.latex(
 r"""
-P(\text{meet ≥ 1 known person})
-=
-1 - P(\text{no engagement})
+\text{Estimated probability}
+\approx
+\frac{\text{number of runs with a meeting}}
+     {\text{total number of runs}}
 """
     )
 
     st.markdown(
         """
-**In words:**  
-The only way the cat *doesn’t* meet someone they know  
-is if every house visited is unknown, or engagement fails every time —  
-so we compute that case and subtract from 1.
+### 🧠 Why Monte Carlo is useful
+
+- Works when the analytic maths becomes complicated  
+  (e.g. distance weighting, biased movement, street networks)  
+- Lets us **test and compare** the analytic models  
+- Makes the randomness tangible: each run is one possible “lost cat” story
+
+Monte Carlo is like replaying the missing-cat story thousands of times  
+and counting how often the cat meets someone you know.
 """
     )
-
-
-
-
-with tab3:
-
-        st.markdown(
-        """
-### Monte Carlo (Simulation) Model
-
-**Intuition:**  
-Instead of solving the formula directly, we **simulate many missing-cat scenarios** and count how often a meeting happens.
-
-For each simulation:
-
-1. Randomly choose which houses are *known houses*  
-2. Randomly choose the \(N\) houses the cat visits  
-3. For each known house visited, engagement happens with probability \(q\)  
-4. Mark success if engagement happens at least once
-
-Repeat thousands of times →  
-the fraction of successes ≈ the probability.
-
-**Why it’s useful**
-
-- Easy to add realism (distance-decay, spatial wandering, clustering)
-- Lets us compare outcomes with the analytic model
-- Great for experimentation and visualisation
-"""
-    )
-
-
 
