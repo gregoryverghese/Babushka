@@ -58,18 +58,33 @@ def analytic_prob_at_least_one(H, F, N, q=1.0):
     return 1 - p_no_engagement
 
 
-def monte_carlo_prob(H, F, N, q=1.0, sims=5000):
-    """Monte Carlo estimate."""
+def monte_carlo_prob_weighted(
+    H, F, N, q=1.0, sims=5000,
+    max_radius=1.0,    # max distance from home (e.g. 1 mile)
+    alpha=2.0          # decay rate
+):
+    """Monte Carlo estimate with distance-based exponential decay."""
     successes = 0
 
+    # --- define distances from home for each house ---
+    # Example: random positions in a disk around home
+    # radius distribution ~ sqrt(U) to be roughly uniform in area
+    radii = np.sqrt(np.random.rand(H)) * max_radius   # shape (H,)
+
+    # Exponential decay weights: closer houses => higher weight
+    weights = np.exp(-alpha * radii)
+    p_visit = weights / weights.sum()   # normalised visit probs
+
     for _ in range(sims):
-        # Randomly choose which houses are known
+        # Randomly choose which houses are known (still uniform)
         known = set(random.sample(range(H), F))
 
-        # Sample N distinct visited houses
-        visited = set(random.sample(range(H), N))
+        # Sample N distinct visited houses, biased by distance
+        visited_idx = np.random.choice(
+            H, size=N, replace=False, p=p_visit
+        )
+        visited = set(visited_idx)
 
-        # Known houses actually visited
         visited_known = visited & known
 
         engaged = False
@@ -82,6 +97,7 @@ def monte_carlo_prob(H, F, N, q=1.0, sims=5000):
             successes += 1
 
     return successes / sims
+
 
 
 # -----------------------------
@@ -109,6 +125,9 @@ sims = 5000
 
 if mode == "Monte Carlo":
     sims = st.sidebar.slider("Simulation runs", 1000, 20000, 5000, step=1000)
+    max_radius = st.sidebar.slider("Max distance from home", 0.1, 2.0, 1.0, step=0.1)
+    alpha = st.sidebar.slider("Decay rate (alpha)", 0.1, 5.0, 2.0, step=0.1)
+
 
 st.sidebar.markdown("---")
 
@@ -130,7 +149,7 @@ elif mode == "Binomial":
     st.caption("Visit-based model using the binomial distribution (visits treated as independent trials).")
 
 else:  # Monte Carlo
-    p_mc = monte_carlo_prob(H, F, N, q, sims)
+    p_mc = monte_carlo_prob_weighted(H, F, N, q, sims, max_radius, alpha)
     st.metric("Probability (Monte Carlo)", f"{p_mc*100:.2f}%")
     st.caption(f"Estimated from {sims:,} simulated scenarios.")
 
@@ -394,6 +413,8 @@ with tab3:
     st.markdown(
         """
 ### 🎲 Monte Carlo (Simulation) Model
+
+In the weighted Monte Carlo version, we imagine houses scattered around the cat’s home and give each one a distance. The chance the cat visits a house decays exponentially with distance, so nearby houses are much more likely to be visited than far-away ones. We then simulate the missing-cat story many times using these biased visit probabilities and estimate how often a meeting with someone we know occurs.
 
 **Idea:**  
 Instead of solving the probability with a formula, we **simulate the scenario many times**
