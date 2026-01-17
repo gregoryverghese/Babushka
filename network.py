@@ -5,7 +5,7 @@ import geopandas as gpd
 from shapely.geometry import Point
 
 
-def build_house_road_network(place="N1 2QF, UK", radius_m=800, friend_pct=0, seed=42):
+def build_house_road_network(place="N1 4QU, UK", radius_m=800, friend_pct=0, seed=42):
 
     """
     Builds a combined network:
