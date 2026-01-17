@@ -9,12 +9,12 @@ from math import comb
 from network import build_house_road_network
 from viz import plot_network_3d  # (or plot_network_2d if you add it)
 
-st.set_page_config(page_title="Find Babushka Model", layout="wide")
-st.title("🐱 Find Babushka Model")
+st.set_page_config(page_title="Find your Cat Model", layout="wide")
+st.title("🐱 Find Cat Model")
 
 st.markdown(
     """
-This app estimates the probability that Babushka meets at least one person her owner knows.
+This app estimates the probability that a cat meets at least one person her owner knows.
 Choose **Network** for an OpenStreetMap-based neighbourhood graph, or **Statistical** for the simpler distributions.
 """
 )
