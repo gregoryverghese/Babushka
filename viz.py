@@ -121,7 +121,7 @@ def plot_network_3d(G, max_edges=20000, show_houses=True, show_pubs=True, show_f
             zaxis=dict(visible=False),
             aspectmode="data",
             camera=dict(
-                eye=dict(x=2.5, y=2.5, z=1.8),
+                eye=dict(x=7.0, y=7.0, z=7.0),
                 center=dict(x=0, y=0, z=0)
             )
         ),
