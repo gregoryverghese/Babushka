@@ -96,7 +96,7 @@ if app_mode == "Network":
     st.sidebar.header("Network Inputs")
 
     with st.sidebar.form("net_params"):
-        place = st.text_input("Home area (postcode / place)", value="N1 2QF, UK")
+        place = st.text_input("Home area (postcode / place)", value="N1 4QU, UK")
         radius_m = st.slider("Radius (meters)", 200, 3000, 1609, step=50)
         friend_pct = st.slider("Friend houses (%)", 0, 100, 10, step=1)
         show_friends = st.checkbox("Highlight friend houses", value=True)
