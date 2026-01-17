@@ -2,4 +2,9 @@ streamlit
 numpy
 pandas
 altair
-
+plotly
+osmnx
+geopandas
+shapely
+pyproj
+networkx
