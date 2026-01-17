@@ -1,90 +1,65 @@
 import math
 import random
 import numpy as np
+import pandas as pd
+import altair as alt
 import streamlit as st
 from math import comb
 
-st.set_page_config(page_title="Find Babuskha Model")
+from network import build_house_road_network
+from viz import plot_network_3d  # (or plot_network_2d if you add it)
 
-st.title("🐱 Find Babuskha Model")
+st.set_page_config(page_title="Find Babushka Model", layout="wide")
+st.title("🐱 Find Babushka Model")
 
 st.markdown(
     """
-This app estimates the probability that Babushka meets at least one person her owner knows on a trip around the neighbourhood houses,
-using either a binomial model (analytic) or a **Monte Carlo simulation**.
+This app estimates the probability that Babushka meets at least one person her owner knows.
+Choose **Network** for an OpenStreetMap-based neighbourhood graph, or **Statistical** for the simpler distributions.
 """
 )
 
 # -----------------------------
-# Utility functions
+# Utility functions (statistical)
 # -----------------------------
-
 def binomial_prob_at_least_one(H, F, N, q=1.0):
-    """
-    Visit-based model (binomial approximation).
-    Each visit is a trial:
-      p_engage = q * (F/H)
-    Probability of at least one engagement over N visits.
-    """
     if H <= 0 or N <= 0 or F <= 0 or q <= 0:
         return 0.0
-
     p_engage = q * (F / H)
-    # Clamp just in case of weird inputs
     p_engage = max(0.0, min(1.0, p_engage))
-
     return 1 - (1 - p_engage) ** N
 
 
 def hypergeometric_p_k(H, F, N, k):
-    """Probability of exactly k known houses visited."""
     if k > F or k > N:
-        return 0
+        return 0.0
     return comb(F, k) * comb(H - F, N - k) / comb(H, N)
 
 
 def analytic_prob_at_least_one(H, F, N, q=1.0):
-    """
-    Probability of at least one engagement with engagement probability q.
-    q = 1 reduces to the simpler no-engagement model.
-    """
     max_k = min(F, N)
     p_no_engagement = 0.0
-
     for k in range(0, max_k + 1):
         p_k = hypergeometric_p_k(H, F, N, k)
         p_no_engagement += ((1 - q) ** k) * p_k
-
     return 1 - p_no_engagement
 
 
 def monte_carlo_prob_weighted(
     H, F, N, q=1.0, sims=5000,
-    max_radius=1.0,    # max distance from home (e.g. 1 mile)
-    alpha=2.0          # decay rate
+    max_radius=1.0,
+    alpha=2.0
 ):
-    """Monte Carlo estimate with distance-based exponential decay."""
     successes = 0
 
-    # --- define distances from home for each house ---
-    # Example: random positions in a disk around home
-    # radius distribution ~ sqrt(U) to be roughly uniform in area
-    radii = np.sqrt(np.random.rand(H)) * max_radius   # shape (H,)
-
-    # Exponential decay weights: closer houses => higher weight
+    radii = np.sqrt(np.random.rand(H)) * max_radius
     weights = np.exp(-alpha * radii)
-    p_visit = weights / weights.sum()   # normalised visit probs
+    p_visit = weights / weights.sum()
 
     for _ in range(sims):
-        # Randomly choose which houses are known (still uniform)
         known = set(random.sample(range(H), F))
-
-        # Sample N distinct visited houses, biased by distance
-        visited_idx = np.random.choice(
-            H, size=N, replace=False, p=p_visit
-        )
+        visited_idx = np.random.choice(H, size=N, replace=False, p=p_visit)
         visited = set(visited_idx)
-
         visited_known = visited & known
 
         engaged = False
@@ -92,306 +67,232 @@ def monte_carlo_prob_weighted(
             if random.random() < q:
                 engaged = True
                 break
-
         if engaged:
             successes += 1
 
     return successes / sims
 
 
+# -----------------------------
+# TOP-LEVEL APP MODE (2 tabs)
+# -----------------------------
+tab_network_mode, tab_stat_mode = st.tabs(["🗺️ Network", "📊 Statistical"])
 
 # -----------------------------
-# Sidebar controls
+# SIDEBAR: show controls depending on which mode user is in
 # -----------------------------
-
-st.sidebar.header("Model Inputs")
-
-H = st.sidebar.number_input("Total houses in area (H)", min_value=1, value=2000)
-F = st.sidebar.number_input("Known houses (F)", min_value=0, value=20)
-N = st.sidebar.number_input("Houses visited (N)", min_value=1, value=3)
-
-q = st.sidebar.slider(
-    "Engagement probability per known-house visit (q)",
-    min_value=0.0, max_value=1.0, value=1.0, step=0.05
-)
-
-
-mode = st.sidebar.radio(
-    "Model",
-    ["Binomial","Hypergeometric",  "Monte Carlo"]
-)
-
-sims = 5000
-
-if mode == "Monte Carlo":
-    sims = st.sidebar.slider("Simulation runs", 1000, 20000, 5000, step=1000)
-    max_radius = st.sidebar.slider("Max distance from home", 0.1, 2.0, 1.0, step=0.1)
-    alpha = st.sidebar.slider("Decay rate (alpha)", 0.1, 5.0, 2.0, step=0.1)
-
+# Streamlit note: both tabs are rendered, so sidebar will show whichever branch runs.
+# We use a sidebar toggle to choose which sidebar panel is active.
+# (This avoids confusing mixed sidebars across tabs.)
+st.sidebar.header("App Mode")
+app_mode = st.sidebar.radio("Choose mode", ["Network", "Statistical"], index=0)
 
 st.sidebar.markdown("---")
 
+# -----------------------------
+# NETWORK MODE
+# -----------------------------
+if app_mode == "Network":
+    st.sidebar.header("Network Inputs")
+
+    with st.sidebar.form("net_params"):
+        place = st.text_input("Home area (postcode / place)", value="N1 2QF, UK")
+        radius_m = st.slider("Radius (meters)", 200, 3000, 1609, step=50)
+        friend_pct = st.slider("Friend houses (%)", 0, 100, 10, step=1)
+        show_friends = st.checkbox("Highlight friend houses", value=True)
+
+
+
+
+
+        show_network = st.checkbox("Show network", value=True)
+
+        apply = st.form_submit_button("Rebuild network")
+
+    st.sidebar.markdown("---")
+    st.sidebar.caption("Network is constructed from OpenStreetMap. First load can take a moment.")
+
+    # Clear cache only when user clicks Apply
+    if apply:
+        st.cache_resource.clear()
+        st.rerun()
+
+ 
+
+    @st.cache_resource
+    def load_network(_place: str, _radius_m: int, _friend_pct: int):
+        return build_house_road_network(place=_place, radius_m=_radius_m, friend_pct=_friend_pct)
+
+    G = load_network(place, int(radius_m), int(friend_pct))
+
+    
+    with tab_network_mode:
+        st.subheader("Neighbourhood network")
+
+        if show_network:
+            with st.spinner("Building network from OpenStreetMap..."):
+                G = load_network(place, int(radius_m),int(friend_pct))
+
+            fig = plot_network_3d(G, show_friends=show_friends)
+
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Enable **Show network** in the sidebar to render the graph.")
+
+        st.caption("Tip: drag to rotate, scroll to zoom, right-drag (or two-finger drag) to pan.")
+
+        # --- quick network summary ---
+        num_nodes = G.number_of_nodes()
+        num_edges = G.number_of_edges()
+
+        house_nodes = sum(1 for _, d in G.nodes(data=True) if d.get("node_type") == "house")
+        pub_nodes = sum(1 for _, d in G.nodes(data=True) if d.get("node_type") == "pub")
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Nodes", f"{num_nodes:,}")
+        c2.metric("Edges", f"{num_edges:,}")
+        c3.metric("Houses", f"{house_nodes:,}")
+        c4.metric("Pubs", f"{pub_nodes:,}")
 
 # -----------------------------
-# Run model
+# STATISTICAL MODE
 # -----------------------------
-
-st.subheader("Results")
-
-if mode == "Hypergeometric":
-    p = analytic_prob_at_least_one(H, F, N, q)
-    st.metric("Probability (hypergeometric)", f"{p*100:.2f}%")
-    st.caption("House-based model using the hypergeometric distribution (Houses visited).")
-
-elif mode == "Binomial":
-    p = binomial_prob_at_least_one(H, F, N, q)
-    st.metric("Probability (binomial)", f"{p*100:.2f}%")
-    st.caption("Visit-based model using the binomial distribution (visits treated as independent trials).")
-
-else:  # Monte Carlo
-    p_mc = monte_carlo_prob_weighted(H, F, N, q, sims, max_radius, alpha)
-    st.metric("Probability (Monte Carlo)", f"{p_mc*100:.2f}%")
-    st.caption(f"Estimated from {sims:,} simulated scenarios.")
-
-
-# -----------------------------
-# P plot
-# -----------------------------
-
-import pandas as pd
-import altair as alt
-import numpy as np
-
-st.subheader("Probability vs. Number of Houses Visited")
-
-# -------------------------
-# Helper: pick analytic model for curve
-# -------------------------
-def analytic_for_curve(H, F, N_i, q, mode):
-    if mode == "Hypergeometric (house-based)":
-        return analytic_prob_at_least_one(H, F, N_i, q)
-    elif mode == "Binomial (visit-based)":
-        return binomial_prob_at_least_one(H, F, N_i, q)
-    else:
-        # If in Monte Carlo mode, default to hypergeometric for the line
-        return analytic_prob_at_least_one(H, F, N_i, q)
-
-# -------------------------
-# Monte Carlo curve toggle
-# -------------------------
-if "show_mc_curve" not in st.session_state:
-    st.session_state["show_mc_curve"] = False
-
-if mode == "Monte Carlo":
-    if st.button("Compute Monte Carlo curve (slower)"):
-        st.session_state["show_mc_curve"] = not st.session_state["show_mc_curve"]
 else:
-    # Leaving MC mode → disable curve + show hint
-    st.session_state["show_mc_curve"] = False
-    st.caption("Select Monte Carlo mode on the left to enable the Monte Carlo curve.")
+    st.sidebar.header("Statistical Inputs")
 
-# -------------------------
-# Build analytic curve (hypergeometric or binomial)
-# -------------------------
-max_N = min(H, 2000)
+    H = st.sidebar.number_input("Total houses in area (H)", min_value=1, value=2000)
+    F = st.sidebar.number_input("Known houses (F)", min_value=0, value=20)
+    N = st.sidebar.number_input("Visits / houses visited (N)", min_value=1, value=3)
 
-num_points = 200  # subsample for speed
-Ns = np.linspace(1, max_N, num_points, dtype=int)
-Ns = sorted(set(Ns))
-
-analytic_probs = [
-    analytic_for_curve(H, F, N_i, q, mode)
-    for N_i in Ns
-]
-
-df_plot = pd.DataFrame({
-    "N": Ns,
-    "Model": [mode if mode != "Monte Carlo" else "Hypergeometric (house-based)"] * len(Ns),
-    "Probability": analytic_probs,
-})
-
-# Base analytic line
-chart = (
-    alt.Chart(df_plot)
-    .mark_line()
-    .encode(
-        x=alt.X("N", title="N (houses visited)"),
-        y=alt.Y("Probability", scale=alt.Scale(domain=[0, 1])),
-        color=alt.Color("Model", title="Model"),
-        tooltip=[
-            alt.Tooltip("N", title="N (houses visited)"),
-            "Model",
-            alt.Tooltip("Probability", format=".3f"),
-        ],
-    )
-)
-
-# -------------------------
-# Optional Monte Carlo curve
-# -------------------------
-if st.session_state["show_mc_curve"] and mode == "Monte Carlo":
-    num_points_mc = 60  # fewer points for performance
-    Ns_mc = np.linspace(1, max_N, num_points_mc, dtype=int)
-    Ns_mc = sorted(set(Ns_mc))
-
-    sims_curve = min(1000, sims)  # cap sims per point
-
-    mc_probs = [
-        monte_carlo_prob(H, F, N_i, q, sims_curve)
-        for N_i in Ns_mc
-    ]
-
-    df_mc = pd.DataFrame({
-        "N": Ns_mc,
-        "Model": ["Monte Carlo"] * len(Ns_mc),
-        "Probability": mc_probs,
-    })
-
-    df_all = pd.concat([df_plot, df_mc], ignore_index=True)
-
-    chart = (
-        alt.Chart(df_all)
-        .mark_line()
-        .encode(
-            x=alt.X("N", title="N (houses visited)"),
-            y=alt.Y("Probability", scale=alt.Scale(domain=[0, 1])),
-            color=alt.Color("Model", title="Model"),
-            tooltip=[
-                alt.Tooltip("N", title="N (houses visited)"),
-                "Model",
-                alt.Tooltip("Probability", format=".3f"),
-            ],
-        )
+    q = st.sidebar.slider(
+        "Engagement probability per known-house visit (q)",
+        min_value=0.0, max_value=1.0, value=1.0, step=0.05
     )
 
-st.altair_chart(chart.interactive(), use_container_width=True)
+    mode = st.sidebar.radio("Model", ["Binomial", "Hypergeometric", "Monte Carlo"])
 
-st.caption(
-    "The curve shows the selected analytic model (hypergeometric or binomial). "
-    "In Monte Carlo mode, you can optionally add a simulated comparison curve."
-)
+    sims = 5000
+    max_radius = 1.0
+    alpha = 2.0
+    if mode == "Monte Carlo":
+        sims = st.sidebar.slider("Simulation runs", 1000, 20000, 5000, step=1000)
+        max_radius = st.sidebar.slider("Max distance from home (synthetic, miles)", 0.1, 2.0, 1.0, step=0.1)
+        alpha = st.sidebar.slider("Decay rate (alpha)", 0.1, 5.0, 2.0, step=0.1)
 
-# -----------------------------
-# Explanation panel
-# -----------------------------
+    st.sidebar.markdown("---")
 
-st.subheader("Model explanation")
+    # Tabs inside Statistical
+    with tab_stat_mode:
+        tab_results, tab_plot, tab_explain = st.tabs(["Results", "Probability plot", "Model explanation"])
 
-tab1, tab2, tab3 = st.tabs([
-    "📍 Binomial (visit-based)",
-    "🧮 Hypergeometric (house-based)",
-    "🎲 Monte Carlo"
-])
+        # ---------- Results ----------
+        with tab_results:
+            st.subheader("Results")
 
-# -------------------------------------------------------------------
-# TAB 1 — BINOMIAL (VISIT-BASED)
-# -------------------------------------------------------------------
-with tab1:
-    st.markdown(
-        """
-### 📍 Binomial (Visit-Based) Model
+            if mode == "Hypergeometric":
+                p = analytic_prob_at_least_one(H, F, N, q)
+                st.metric("Probability (hypergeometric)", f"{p*100:.2f}%")
+                st.caption("House-based model (distinct houses).")
 
-We use a binomial model because we think of each visit as a trial that can only go one of two ways: either the cat meets someone they know (a success), or it doesn’t (a failure). Over 
-N visits there are many different ways those successes could occur, for example, the 3rd visit might be the success, or the 5th, or several of them, and the binomial distribution correctly accounts for all the different combinations of successes across the 
-N visits. In this app, we’re especially interested in the chance that at least one of those visits is a success (cat meets someone the owner knows).
+            elif mode == "Binomial":
+                p = binomial_prob_at_least_one(H, F, N, q)
+                st.metric("Probability (binomial)", f"{p*100:.2f}%")
+                st.caption("Visit-based model (independent visits).")
 
-**Idea (what this model assumes):**  
-We treat each **visit** as a separate opportunity for engagement.  
-The cat may revisit the same house multiple times — every arrival is another chance.
+            else:
+                p_mc = monte_carlo_prob_weighted(H, F, N, q, sims, max_radius, alpha)
+                st.metric("Probability (Monte Carlo)", f"{p_mc*100:.2f}%")
+                st.caption(f"Estimated from {sims:,} simulations (distance-weighted synthetic visits).")
 
-- **H** — total houses  
-- **F** — houses belonging to people the owner knows  
-- **N** — number of visits the cat makes  
-- **q** — probability of engagement when a known house is visited
+        # ---------- Plot ----------
+        with tab_plot:
+            st.subheader("Probability vs. N")
+
+            # analytic curve uses the selected analytic model; if in MC mode, we show hypergeometric as baseline
+            def analytic_for_curve(H_, F_, N_i, q_, model_name):
+                if model_name == "Hypergeometric":
+                    return analytic_prob_at_least_one(H_, F_, N_i, q_)
+                if model_name == "Binomial":
+                    return binomial_prob_at_least_one(H_, F_, N_i, q_)
+                # baseline in Monte Carlo mode
+                return analytic_prob_at_least_one(H_, F_, N_i, q_)
+
+            if "show_mc_curve" not in st.session_state:
+                st.session_state["show_mc_curve"] = False
+
+            if mode == "Monte Carlo":
+                if st.button("Toggle Monte Carlo curve (slower)"):
+                    st.session_state["show_mc_curve"] = not st.session_state["show_mc_curve"]
+            else:
+                st.session_state["show_mc_curve"] = False
+
+            max_N = min(H, 2000)
+            Ns = np.linspace(1, max_N, 200, dtype=int)
+            Ns = sorted(set(Ns))
+
+            analytic_probs = [analytic_for_curve(H, F, n_i, q, mode) for n_i in Ns]
+            base_label = mode if mode != "Monte Carlo" else "Hypergeometric (baseline)"
+
+            df_plot = pd.DataFrame({"N": Ns, "Model": [base_label]*len(Ns), "Probability": analytic_probs})
+
+            chart = (
+                alt.Chart(df_plot)
+                .mark_line()
+                .encode(
+                    x=alt.X("N", title="N (visits / houses visited)"),
+                    y=alt.Y("Probability", scale=alt.Scale(domain=[0, 1])),
+                    color=alt.Color("Model", title="Model"),
+                    tooltip=[alt.Tooltip("N"), alt.Tooltip("Model"), alt.Tooltip("Probability", format=".3f")],
+                )
+            )
+
+            if st.session_state["show_mc_curve"] and mode == "Monte Carlo":
+                Ns_mc = np.linspace(1, max_N, 60, dtype=int)
+                Ns_mc = sorted(set(Ns_mc))
+                sims_curve = min(1000, sims)
+
+                mc_probs = [
+                    monte_carlo_prob_weighted(H, F, n_i, q, sims_curve, max_radius, alpha)
+                    for n_i in Ns_mc
+                ]
+                df_mc = pd.DataFrame({"N": Ns_mc, "Model": ["Monte Carlo"]*len(Ns_mc), "Probability": mc_probs})
+
+                df_all = pd.concat([df_plot, df_mc], ignore_index=True)
+
+                chart = (
+                    alt.Chart(df_all)
+                    .mark_line()
+                    .encode(
+                        x=alt.X("N", title="N (visits / houses visited)"),
+                        y=alt.Y("Probability", scale=alt.Scale(domain=[0, 1])),
+                        color=alt.Color("Model", title="Model"),
+                        tooltip=[alt.Tooltip("N"), alt.Tooltip("Model"), alt.Tooltip("Probability", format=".3f")],
+                    )
+                )
+
+            st.altair_chart(chart.interactive(), use_container_width=True)
+
+        # ---------- Explanation ----------
+        with tab_explain:
+            st.subheader("Model explanation")
+
+            e1, e2, e3 = st.tabs(["📍 Binomial", "🧮 Hypergeometric", "🎲 Monte Carlo"])
+
+            with e1:
+                st.markdown(
+                    """
+**Why binomial?** Each visit is a trial with two outcomes: engagement (success) or not (failure).
+Across **N** visits there are many ways successes can occur, and the binomial model accounts for all of them.
+We usually care about the probability of **at least one** success.
 """
-    )
+                )
+                st.latex(r"p_{\text{engage}} = q\frac{F}{H}")
+                st.latex(r"P(\ge 1) = 1-(1-p_{\text{engage}})^N")
 
-    st.markdown("**Probability a visit is to a known house:**")
-    st.latex(r"p_{\text{known}} = \frac{F}{H}")
-
-    st.markdown("**Probability a visit results in engagement:**")
-    st.latex(r"p_{\text{engage}} = q \cdot p_{\text{known}} = q \cdot \frac{F}{H}")
-
-    st.markdown("#### Binomial distribution")
-
-    st.markdown("Let \(X\) be the number of visits that result in an engagement.")
-    st.latex(r"X \sim \text{Binomial}(N,\; p_{\text{engage}})")
-
-    st.markdown("The probability of **exactly \(k\) engagements** is:")
-    st.latex(
-r"""
-P(X = k)
-=
-\binom{N}{k}
-\left(p_{\text{engage}}\right)^k
-\left(1-p_{\text{engage}}\right)^{N-k}
-"""
-    )
-
-    st.markdown("Probability of **no engagement on any visit**:")
-    st.latex(r"P(X = 0) = (1 - p_{\text{engage}})^N")
-
-    st.markdown("Therefore, the probability of **at least one engagement** is:")
-    st.latex(
-r"""
-P(\text{at least one engagement})
-=
-1 - (1 - p_{\text{engage}})^N
-=
-1 - \left(1 - q\frac{F}{H}\right)^N
-"""
-    )
-
-    st.markdown(
-        """
-
-"""
-    )
-
-# -------------------------------------------------------------------
-# TAB 2 — HYPERGEOMETRIC (HOUSE-BASED)
-# -------------------------------------------------------------------
-with tab2:
-    st.markdown(
-        """
-### 🧮 Hypergeometric (House-Based) Model
-
-**Idea (what this model assumes):**  
-We think in terms of **distinct houses**, not visits.  
-What matters is which **unique houses** the cat ends up in.
-
-- **H** — total houses  
-- **F** — houses belonging to people the owner knows  
-- **N** — number of **distinct** houses visited  
-- **q** — probability of engagement when a known house is visited
-"""
-    )
-
-    st.markdown("Let \(K\) be the number of known houses among the \(N\) visited houses.")
-    st.markdown("**Hypergeometric probability of visiting exactly \(k\) known houses:**")
-    st.latex(
-r"""
-P(K = k)
-=
-\frac{
-\binom{F}{k}\,
-\binom{H-F}{N-k}
-}{
-\binom{H}{N}
-}
-"""
-    )
-
-    st.markdown(
-        """
-If the cat visits \(k\) known houses, engagement must fail at **all \(k\)** of them for no meeting to occur.  
-That has probability \((1-q)^k\).
-
-So the total probability of **no engagement at all** is:
-"""
-    )
-    st.latex(
-r"""
+            with e2:
+                st.markdown("House-based: cat visits **N distinct houses** out of **H**, with **F** known houses.")
+                st.latex(
+                    r"""
 P(\text{no engagement})
 =
 \sum_{k=0}^{\min(F,N)}
@@ -399,50 +300,23 @@ P(\text{no engagement})
 \frac{\binom{F}{k}\binom{H-F}{N-k}}
      {\binom{H}{N}}
 """
-    )
+                )
+                st.latex(r"P(\ge 1)=1-P(\text{no engagement})")
 
-    st.markdown("Therefore, the probability of **meeting at least one known person** is:")
-    st.latex(r"P(\text{meet ≥ 1 known person}) = 1 - P(\text{no engagement})")
-
-
-
-# -------------------------------------------------------------------
-# TAB 3 — MONTE CARLO (SIMULATION)
-# -------------------------------------------------------------------
-with tab3:
-    st.markdown(
-        """
-### 🎲 Monte Carlo (Simulation) Model
-
-In the weighted Monte Carlo version, we imagine houses scattered around the cat’s home and give each one a distance. The chance the cat visits a house decays exponentially with distance, so nearby houses are much more likely to be visited than far-away ones. We then simulate the missing-cat story many times using these biased visit probabilities and estimate how often a meeting with someone we know occurs.
-
-**Idea:**  
-Instead of solving the probability with a formula, we **simulate the scenario many times**
-and see how often a meeting happens.
+            with e3:
+                st.markdown(
+                    """
+Monte Carlo simulates many “lost cat” scenarios and estimates the probability empirically.
+In the weighted version, visit probabilities decay with distance using an exponential weight.
 """
-    )
-
-    st.markdown("#### One simulation run looks like this:")
-
-    st.markdown(
-        """
-1. Randomly choose **F** known houses out of **H**  
-2. Randomly choose **N** distinct visited houses out of **H**  
-3. Find which of the visited houses are known houses  
-4. For each visited known house, flip an engagement coin with probability **q**  
-5. If **any** of those flips succeed, we count that run as “meeting happened”
+                )
+                st.latex(
+                    r"""
+\hat{p} \approx
+\frac{\text{# simulations with at least one engagement}}{\text{# simulations}}
 """
-    )
+                )
 
-    st.markdown("After many runs, the estimated probability is:")
-    st.latex(
-r"""
-\text{Estimated probability}
-\approx
-\frac{\text{number of runs with a meeting}}
-     {\text{total number of runs}}
-"""
-    )
-
-
-
+    # In Statistical mode, keep Network tab minimal
+    with tab_network_mode:
+        st.info("Switch to **Network** in the sidebar to explore the OpenStreetMap-based neighbourhood graph.")
