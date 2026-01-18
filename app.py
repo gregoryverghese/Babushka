@@ -134,11 +134,13 @@ if app_mode == "Network":
                 G = load_network(place, int(radius_m),int(friend_pct))
 
             fig = plot_network_3d(G, show_friends=show_friends)
-
+            #col1, col2 = st.columns([5, 1])
+            #with col1:
             st.plotly_chart(fig, use_container_width=True)
+
+            
         else:
             st.info("Enable **Show network** in the sidebar to render the graph.")
-
         st.caption("Tip: drag to rotate, scroll to zoom, right-drag (or two-finger drag) to pan.")
 
         # --- quick network summary ---

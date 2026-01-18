@@ -106,9 +106,6 @@ def plot_network_3d(G, max_edges=20000, show_houses=True, show_pubs=True, show_f
         name="Friend houses"
 )
 
-
-
-
     fig = go.Figure(data=[edges, streets, houses, pubs])
     if show_friends:
         fig.add_trace(friends)
@@ -121,12 +118,18 @@ def plot_network_3d(G, max_edges=20000, show_houses=True, show_pubs=True, show_f
             zaxis=dict(visible=False),
             aspectmode="data",
             camera=dict(
-                eye=dict(x=7.0, y=7.0, z=7.0),
+                eye=dict(x=8.0, y=8.0, z=8.0),
                 center=dict(x=0, y=0, z=0)
             )
         ),
         margin=dict(l=0, r=0, t=30, b=0),
-        legend=dict(yanchor="top", y=0.95)
+        legend=dict(
+        orientation="h",
+        yanchor="top",
+        y=-0.15,
+        xanchor="center",
+        x=0.5
     )
-
+    )
     return fig
+
